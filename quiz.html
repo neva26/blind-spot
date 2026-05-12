@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Карта потерь — AI-квиз</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #09090f;
+      --surface:#13131f;
+      --card:   #1a1a2e;
+      --border: rgba(255,255,255,0.07);
+      --a1: #ff6fd8;
+      --a2: #a259ff;
+      --a3: #4ecdc4;
+      --red:  #ff5c5c;
+      --yellow: #ffd166;
+      --green: #4ecdc4;
+      --text: #efefef;
+      --muted: #777;
+    }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── orbs ── */
+    .bg-orbs { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+    .orb { position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.14; }
+    .orb1 { width: 500px; height: 500px; background: var(--a1); top: -160px; left: -160px; animation: o1 14s ease-in-out infinite alternate; }
+    .orb2 { width: 420px; height: 420px; background: var(--a2); bottom: -140px; right: -140px; animation: o2 18s ease-in-out infinite alternate; }
+    @keyframes o1 { to { transform: translate(60px,80px) scale(1.1); } }
+    @keyframes o2 { to { transform: translate(-60px,-60px) scale(1.12); } }
+
+    /* ── layout ── */
+    .shell {
+      position: relative; z-index: 1;
+      min-height: 100svh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .box {
+      width: 100%; max-width: 620px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 48px 44px;
+      position: relative;
+      overflow: hidden;
+    }
+    .box::before {
+      content: '';
+      position: absolute; inset: 0;
+      border-radius: inherit; padding: 1px;
+      background: linear-gradient(135deg, var(--a1), var(--a2), var(--a3));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      opacity: 0.35; pointer-events: none;
+    }
+
+    /* ── progress ── */
+    .progress-wrap {
+      margin-bottom: 36px;
+    }
+    .progress-meta {
+      display: flex; justify-content: space-between;
+      font-size: 0.78rem; color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .progress-track {
+      height: 4px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 100px;
+      background: linear-gradient(90deg, var(--a1), var(--a2));
+      transition: width 0.5s cubic-bezier(.22,1,.36,1);
+    }
+
+    /* ── screens ── */
+    .screen { display: none; animation: fadeIn 0.4s ease both; }
+    .screen.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ── start screen ── */
+    .start-emoji { font-size: 3.2rem; margin-bottom: 16px; }
+    .start-title {
+      font-size: clamp(1.7rem, 5vw, 2.4rem);
+      font-weight: 800; letter-spacing: -1px; line-height: 1.15;
+      margin-bottom: 14px;
+    }
+    .grad {
+      background: linear-gradient(120deg, var(--a1), var(--a2) 55%, var(--a3));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .start-sub { color: var(--muted); font-size: 0.95rem; margin-bottom: 32px; line-height: 1.6; }
+    .start-sub strong { color: var(--text); }
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 36px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 6px 14px; border-radius: 100px;
+      background: rgba(162,89,255,0.1); border: 1px solid rgba(162,89,255,0.25);
+      font-size: 0.8rem; color: var(--a2);
+    }
+    .chip svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    /* ── question ── */
+    .q-label { font-size: 0.75rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+    .q-text { font-size: clamp(1.05rem, 3vw, 1.3rem); font-weight: 700; line-height: 1.35; margin-bottom: 28px; }
+    .q-hint { font-size: 0.8rem; color: var(--muted); margin-top: -18px; margin-bottom: 22px; }
+
+    /* single-choice options */
+    .options { display: flex; flex-direction: column; gap: 10px; }
+    .opt {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 18px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 0.93rem;
+      transition: background 0.18s, border-color 0.18s, transform 0.18s;
+      user-select: none;
+    }
+    .opt:hover { background: rgba(162,89,255,0.08); border-color: rgba(162,89,255,0.3); transform: translateX(4px); }
+    .opt.selected { background: rgba(162,89,255,0.14); border-color: rgba(162,89,255,0.55); }
+    .opt-radio {
+      flex-shrink: 0;
+      width: 20px; height: 20px; border-radius: 50%;
+      border: 2px solid var(--muted);
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.18s;
+    }
+    .opt.selected .opt-radio { border-color: var(--a2); }
+    .opt-radio-inner {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--a2); opacity: 0; transform: scale(0);
+      transition: opacity 0.18s, transform 0.18s;
+    }
+    .opt.selected .opt-radio-inner { opacity: 1; transform: scale(1); }
+
+    /* multi-choice */
+    .opt-check {
+      flex-shrink: 0;
+      width: 20px; height: 20px; border-radius: 6px;
+      border: 2px solid var(--muted);
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.18s, background 0.18s;
+    }
+    .opt.selected .opt-check {
+      background: var(--a2); border-color: var(--a2);
+    }
+    .opt-check svg { opacity: 0; transition: opacity 0.18s; }
+    .opt.selected .opt-check svg { opacity: 1; }
+
+    /* ── nav ── */
+    .nav { display: flex; align-items: center; justify-content: space-between; margin-top: 30px; gap: 12px; }
+    .btn-back {
+      display: flex; align-items: center; gap: 7px;
+      padding: 12px 20px; border-radius: 12px;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--muted); font-size: 0.88rem; cursor: pointer;
+      transition: border-color 0.18s, color 0.18s;
+    }
+    .btn-back:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+    .btn-next {
+      flex: 1;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 14px 28px; border-radius: 14px;
+      background: linear-gradient(120deg, var(--a1), var(--a2));
+      color: #fff; font-size: 1rem; font-weight: 700;
+      border: none; cursor: pointer;
+      transition: transform 0.18s, box-shadow 0.18s, opacity 0.18s;
+      box-shadow: 0 4px 20px rgba(162,89,255,0.3);
+    }
+    .btn-next:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(162,89,255,0.45); }
+    .btn-next:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* ── results ── */
+    .result-header { text-align: center; margin-bottom: 32px; }
+    .loss-meter {
+      width: 140px; height: 140px;
+      margin: 0 auto 18px;
+      position: relative;
+    }
+    .loss-meter svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .loss-track { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 10; }
+    .loss-fill  { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 1.2s cubic-bezier(.22,1,.36,1); }
+    .loss-label {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .loss-pct  { font-size: 2rem; font-weight: 800; line-height: 1; }
+    .loss-word { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 3px; }
+
+    .result-title {
+      font-size: clamp(1.3rem, 4vw, 1.9rem);
+      font-weight: 800; line-height: 1.2; margin-bottom: 8px;
+    }
+    .result-sub { color: var(--muted); font-size: 0.88rem; }
+
+    .divider { height: 1px; background: var(--border); margin: 28px 0; }
+
+    /* zones */
+    .zones-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 16px; }
+    .zones { display: flex; flex-direction: column; gap: 12px; margin-bottom: 28px; }
+    .zone {
+      border-radius: 14px;
+      padding: 14px 18px;
+      border: 1px solid transparent;
+    }
+    .zone.red    { background: rgba(255,92,92,0.08);   border-color: rgba(255,92,92,0.2); }
+    .zone.yellow { background: rgba(255,209,102,0.08); border-color: rgba(255,209,102,0.2); }
+    .zone.green  { background: rgba(78,205,196,0.08);  border-color: rgba(78,205,196,0.2); }
+    .zone-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .zone-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .zone.red    .zone-dot { background: var(--red); }
+    .zone.yellow .zone-dot { background: var(--yellow); }
+    .zone.green  .zone-dot { background: var(--green); }
+    .zone-tag { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+    .zone.red    .zone-tag { color: var(--red); }
+    .zone.yellow .zone-tag { color: var(--yellow); }
+    .zone.green  .zone-tag { color: var(--green); }
+    .zone-name { font-weight: 600; font-size: 0.95rem; }
+    .zone-text { font-size: 0.82rem; color: var(--muted); line-height: 1.5; margin-top: 4px; }
+
+    /* plan */
+    .plan-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 16px; }
+    .plan-steps { display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
+    .plan-step {
+      display: flex; gap: 14px; align-items: flex-start;
+      padding: 14px 16px; border-radius: 14px;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+    }
+    .plan-num {
+      flex-shrink: 0;
+      width: 28px; height: 28px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--a1), var(--a2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.78rem; font-weight: 800; color: #fff;
+    }
+    .plan-text { font-size: 0.88rem; line-height: 1.5; padding-top: 4px; }
+    .plan-text strong { color: var(--text); display: block; margin-bottom: 2px; }
+    .plan-text span { color: var(--muted); }
+
+    /* cta block */
+    .cta-block { text-align: center; }
+    .cta-block p { font-size: 0.85rem; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
+    .cta-block p strong { color: var(--text); }
+    .btn-cta {
+      display: inline-flex; align-items: center; gap: 10px;
+      width: 100%; justify-content: center;
+      padding: 16px 32px; border-radius: 16px;
+      background: linear-gradient(120deg, var(--a1), var(--a2));
+      color: #fff; font-size: 1rem; font-weight: 700;
+      text-decoration: none; border: none; cursor: pointer;
+      box-shadow: 0 0 0 0 rgba(255,111,216,0.5);
+      animation: pulse 2.4s ease-in-out infinite;
+      transition: transform 0.2s;
+    }
+    .btn-cta:hover { transform: translateY(-2px); animation: none; box-shadow: 0 8px 32px rgba(162,89,255,0.5); }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(255,111,216,0.45); }
+      50%      { box-shadow: 0 0 0 16px rgba(255,111,216,0); }
+    }
+    .cta-hint { margin-top: 14px; font-size: 0.77rem; color: #444; }
+    .cta-hint a { color: var(--a2); text-decoration: none; }
+    .cta-hint a:hover { text-decoration: underline; }
+    .restart-btn {
+      background: none; border: none; color: var(--muted); font-size: 0.8rem;
+      cursor: pointer; margin-top: 14px; text-decoration: underline;
+    }
+    .restart-btn:hover { color: var(--text); }
+
+    /* mobile */
+    @media (max-width: 520px) {
+      .box { padding: 32px 22px; border-radius: 20px; }
+      .nav { flex-direction: column-reverse; }
+      .btn-back { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+</div>
+
+<div class="shell">
+  <div class="box">
+
+    <!-- progress (hidden on start/result) -->
+    <div class="progress-wrap" id="progressWrap" style="display:none">
+      <div class="progress-meta">
+        <span id="progressLabel">Вопрос 1 из 9</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- ══ START ══ -->
+    <div class="screen active" id="screen-start">
+      <div class="start-emoji">🗺️</div>
+      <h1 class="start-title">
+        <span class="grad">Карта потерь</span><br>вашего салона
+      </h1>
+      <p class="start-sub">
+        Ответьте на <strong>9 вопросов</strong> — и AI покажет,
+        где именно вы теряете клиентов, которые уже нашли вашу страницу,
+        и что сделать в первую очередь.
+      </p>
+      <div class="chips">
+        <span class="chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          5 минут
+        </span>
+        <span class="chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Бесплатно
+        </span>
+        <span class="chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Готовый план
+        </span>
+      </div>
+      <button class="btn-next" style="width:100%" onclick="startQuiz()">
+        Начать квиз
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+    </div>
+
+    <!-- ══ QUESTION SCREEN (rendered dynamically) ══ -->
+    <div class="screen" id="screen-question">
+      <div class="q-label" id="qLabel"></div>
+      <div class="q-text"  id="qText"></div>
+      <div class="q-hint"  id="qHint"></div>
+      <div class="options" id="qOptions"></div>
+      <div class="nav">
+        <button class="btn-back" id="btnBack" onclick="prevQ()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Назад
+        </button>
+        <button class="btn-next" id="btnNext" disabled onclick="nextQ()">
+          Далее
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ══ RESULT ══ -->
+    <div class="screen" id="screen-result">
+      <div class="result-header">
+        <div class="loss-meter">
+          <svg viewBox="0 0 120 120">
+            <circle class="loss-track" cx="60" cy="60" r="50"/>
+            <circle class="loss-fill" id="lossFill" cx="60" cy="60" r="50"
+              stroke-dasharray="314" stroke-dashoffset="314"/>
+          </svg>
+          <div class="loss-label">
+            <span class="loss-pct" id="lossPct">—</span>
+            <span class="loss-word">потерь</span>
+          </div>
+        </div>
+        <h2 class="result-title" id="resultTitle">Ваша карта потерь</h2>
+        <p class="result-sub" id="resultSub"></p>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="zones-title">Найденные проблемные зоны</div>
+      <div class="zones" id="resultZones"></div>
+
+      <div class="divider"></div>
+
+      <div class="plan-title">Ваш план на ближайшие 7 дней</div>
+      <div class="plan-steps" id="resultPlan"></div>
+
+      <div class="cta-block">
+        <p>Хотите <strong>разобрать ваш случай лично</strong>?<br>
+        Марина покажет конкретные правки под ваш аккаунт.</p>
+        <a class="btn-cta" href="https://t.me/marinastankina" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+          </svg>
+          Разобрать мой случай в Telegram
+        </a>
+        <div class="cta-hint">
+          Или задайте вопрос: <a href="https://t.me/marinastankina" target="_blank" rel="noopener">@marinastankina</a>
+        </div>
+        <div style="text-align:center">
+          <button class="restart-btn" onclick="restartQuiz()">Пройти заново</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════
+//  QUESTIONS
+// ════════════════════════════════
+const questions = [
+  {
+    id: 'business',
+    text: 'Какой у вас тип бизнеса?',
+    type: 'single',
+    options: [
+      { label: '💅 Салон красоты / студия ногтей', value: 'salon' },
+      { label: '💆 Массажный кабинет / spa', value: 'massage' },
+      { label: '✂️ Парикмахерская / барбершоп', value: 'barber' },
+      { label: '🌿 Косметолог / мастер по уходу', value: 'cosmo' },
+    ]
+  },
+  {
+    id: 'source',
+    text: 'Откуда сейчас приходят клиенты?',
+    hint: 'Можно выбрать несколько',
+    type: 'multi',
+    options: [
+      { label: '📸 Instagram / Reels', value: 'instagram' },
+      { label: '💬 ВКонтакте', value: 'vk' },
+      { label: '✈️ Telegram-канал', value: 'telegram' },
+      { label: '🗣️ Только сарафанное радио', value: 'word' },
+      { label: '🔍 Google / 2ГИС / Яндекс', value: 'geo' },
+      { label: '🛒 Авито / Юла', value: 'avito' },
+    ]
+  },
+  {
+    id: 'views',
+    text: 'Сколько людей в месяц просматривают вашу страницу / профиль?',
+    type: 'single',
+    options: [
+      { label: 'Меньше 100 просмотров', value: 'low', score: 3 },
+      { label: '100 – 500 просмотров', value: 'mid', score: 2 },
+      { label: '500 – 2 000 просмотров', value: 'high', score: 1 },
+      { label: 'Больше 2 000 просмотров', value: 'veryhigh', score: 0 },
+      { label: 'Не отслеживаю / не знаю', value: 'unknown', score: 3 },
+    ]
+  },
+  {
+    id: 'conversion',
+    text: 'Какой примерно % смотрящих записывается?',
+    type: 'single',
+    options: [
+      { label: 'Почти никто — меньше 1%', value: 'none', score: 4 },
+      { label: '1 – 3%', value: 'low', score: 3 },
+      { label: '3 – 7%', value: 'mid', score: 1 },
+      { label: 'Больше 7% — запись есть стабильно', value: 'good', score: 0 },
+      { label: 'Не знаю / не считал(а)', value: 'unknown', score: 4 },
+    ]
+  },
+  {
+    id: 'prices',
+    text: 'Есть ли цены на вашей странице?',
+    type: 'single',
+    options: [
+      { label: '✅ Да — полный понятный прайс', value: 'full', score: 0 },
+      { label: '🔸 Частично — некоторые услуги', value: 'partial', score: 2 },
+      { label: '❌ Нет — пишите в директ', value: 'nodirect', score: 4 },
+      { label: '❌ Нет вообще', value: 'none', score: 4 },
+    ]
+  },
+  {
+    id: 'reviews',
+    text: 'Есть ли отзывы клиентов на вашей странице?',
+    type: 'single',
+    options: [
+      { label: '⭐⭐⭐ Да — много живых отзывов', value: 'many', score: 0 },
+      { label: '⭐ Есть несколько', value: 'few', score: 2 },
+      { label: '🕊 Почти нет', value: 'rare', score: 3 },
+      { label: '❌ Нет отзывов совсем', value: 'none', score: 4 },
+    ]
+  },
+  {
+    id: 'speed',
+    text: 'Как быстро вы отвечаете на входящие сообщения?',
+    type: 'single',
+    options: [
+      { label: '⚡ До 15 минут', value: 'fast', score: 0 },
+      { label: '🕐 В течение часа', value: 'hour', score: 1 },
+      { label: '🕓 Несколько часов', value: 'hours', score: 3 },
+      { label: '😬 Иногда забываю / на следующий день', value: 'slow', score: 4 },
+    ]
+  },
+  {
+    id: 'booking',
+    text: 'Насколько легко клиенту у вас записаться?',
+    type: 'single',
+    options: [
+      { label: '🟢 Есть кнопка или ссылка записи в шапке', value: 'easy', score: 0 },
+      { label: '🟡 Нужно написать в директ — я всегда отвечаю', value: 'direct', score: 2 },
+      { label: '🔴 Нужно написать, но отвечаю не всегда быстро', value: 'hard', score: 4 },
+      { label: '❌ Непонятно как вообще записаться', value: 'unclear', score: 4 },
+    ]
+  },
+  {
+    id: 'content',
+    text: 'Как часто вы публикуете контент / обновляете страницу?',
+    type: 'single',
+    options: [
+      { label: '📅 Каждый день или через день', value: 'daily', score: 0 },
+      { label: '📌 2–3 раза в неделю', value: 'week3', score: 1 },
+      { label: '📎 Раз в неделю или реже', value: 'week1', score: 2 },
+      { label: '📦 Редко — иногда по месяцу тишина', value: 'rare', score: 4 },
+    ]
+  },
+];
+
+// ════════════════════════════════
+//  STATE
+// ════════════════════════════════
+let current = 0;
+let answers = {};   // { questionId: value | value[] }
+
+// ════════════════════════════════
+//  NAVIGATION
+// ════════════════════════════════
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  window.scrollTo({ top: 0 });
+}
+
+function startQuiz() {
+  current = 0;
+  answers = {};
+  document.getElementById('progressWrap').style.display = '';
+  show('question');
+  renderQuestion();
+}
+
+function restartQuiz() {
+  document.getElementById('progressWrap').style.display = 'none';
+  show('start');
+}
+
+function prevQ() {
+  if (current > 0) { current--; renderQuestion(); }
+}
+
+function nextQ() {
+  const q = questions[current];
+  if (!hasAnswer(q)) return;
+  current++;
+  if (current >= questions.length) {
+    document.getElementById('progressWrap').style.display = 'none';
+    show('result');
+    renderResult();
+  } else {
+    renderQuestion();
+  }
+}
+
+function hasAnswer(q) {
+  const a = answers[q.id];
+  if (q.type === 'single') return !!a;
+  if (q.type === 'multi')  return Array.isArray(a) && a.length > 0;
+  return false;
+}
+
+// ════════════════════════════════
+//  RENDER QUESTION
+// ════════════════════════════════
+function renderQuestion() {
+  const q = questions[current];
+  const total = questions.length;
+
+  // progress
+  const pct = Math.round((current / total) * 100);
+  document.getElementById('progressLabel').textContent = `Вопрос ${current + 1} из ${total}`;
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressFill').style.width = pct + '%';
+
+  document.getElementById('qLabel').textContent = `Вопрос ${current + 1} из ${total}`;
+  document.getElementById('qText').textContent = q.text;
+  document.getElementById('qHint').textContent = q.hint || '';
+
+  const container = document.getElementById('qOptions');
+  container.innerHTML = '';
+
+  q.options.forEach((opt, i) => {
+    const div = document.createElement('div');
+    div.className = 'opt';
+
+    const isSelected = q.type === 'single'
+      ? answers[q.id] === opt.value
+      : (answers[q.id] || []).includes(opt.value);
+
+    if (isSelected) div.classList.add('selected');
+
+    if (q.type === 'single') {
+      div.innerHTML = `
+        <div class="opt-radio"><div class="opt-radio-inner"></div></div>
+        <span>${opt.label}</span>`;
+      div.onclick = () => {
+        answers[q.id] = opt.value;
+        container.querySelectorAll('.opt').forEach(o => o.classList.remove('selected'));
+        div.classList.add('selected');
+        document.getElementById('btnNext').disabled = false;
+      };
+    } else {
+      div.innerHTML = `
+        <div class="opt-check">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <span>${opt.label}</span>`;
+      div.onclick = () => {
+        if (!answers[q.id]) answers[q.id] = [];
+        const idx = answers[q.id].indexOf(opt.value);
+        if (idx === -1) { answers[q.id].push(opt.value); div.classList.add('selected'); }
+        else            { answers[q.id].splice(idx, 1);   div.classList.remove('selected'); }
+        document.getElementById('btnNext').disabled = !hasAnswer(q);
+      };
+    }
+
+    container.appendChild(div);
+  });
+
+  document.getElementById('btnBack').style.visibility = current === 0 ? 'hidden' : 'visible';
+  document.getElementById('btnNext').disabled = !hasAnswer(q);
+  document.getElementById('btnNext').textContent = '';
+  document.getElementById('btnNext').innerHTML = current === total - 1
+    ? 'Показать карту потерь <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
+    : 'Далее <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+}
+
+// ════════════════════════════════
+//  CALCULATE & RENDER RESULT
+// ════════════════════════════════
+function calcScore() {
+  let total = 0;
+  questions.forEach(q => {
+    if (q.type !== 'single') return;
+    const chosen = q.options.find(o => o.value === answers[q.id]);
+    if (chosen && chosen.score !== undefined) total += chosen.score;
+  });
+  return total; // max ~27
+}
+
+function renderResult() {
+  const score = calcScore();
+  const maxScore = 27;
+  const lossPct = Math.min(95, Math.round((score / maxScore) * 100));
+
+  // donut
+  const circumference = 314;
+  const offset = circumference - (circumference * lossPct / 100);
+  const fill = document.getElementById('lossFill');
+  fill.style.strokeDashoffset = circumference;
+  const color = lossPct >= 60 ? '#ff5c5c' : lossPct >= 35 ? '#ffd166' : '#4ecdc4';
+  fill.style.stroke = color;
+  setTimeout(() => { fill.style.strokeDashoffset = offset; }, 100);
+
+  document.getElementById('lossPct').textContent = lossPct + '%';
+  document.getElementById('lossPct').style.color = color;
+
+  // title
+  let title, sub;
+  if (lossPct >= 65) {
+    title = 'Критические потери — большинство клиентов уходит';
+    sub   = 'Хорошая новость: есть несколько конкретных точек роста, которые дадут результат уже в ближайшие дни';
+  } else if (lossPct >= 35) {
+    title = 'Есть серьёзные пробелы в конверсии';
+    sub   = 'Вы уже что-то делаете правильно — но несколько зон сливают треть потенциальных клиентов';
+  } else {
+    title = 'Базово всё выстроено — можно работать над ростом';
+    sub   = 'Система есть. Теперь время для тонкой настройки и масштабирования';
+  }
+  document.getElementById('resultTitle').textContent = title;
+  document.getElementById('resultSub').textContent   = sub;
+
+  // ── zones ──
+  const zones = buildZones();
+  const zonesEl = document.getElementById('resultZones');
+  zonesEl.innerHTML = '';
+  zones.forEach(z => {
+    const div = document.createElement('div');
+    div.className = 'zone ' + z.level;
+    div.innerHTML = `
+      <div class="zone-head">
+        <div class="zone-dot"></div>
+        <span class="zone-tag">${z.level === 'red' ? 'Критично' : z.level === 'yellow' ? 'Важно' : 'Хорошо'}</span>
+      </div>
+      <div class="zone-name">${z.name}</div>
+      <div class="zone-text">${z.text}</div>`;
+    zonesEl.appendChild(div);
+  });
+
+  // ── plan ──
+  const plan = buildPlan();
+  const planEl = document.getElementById('resultPlan');
+  planEl.innerHTML = '';
+  plan.forEach((step, i) => {
+    const div = document.createElement('div');
+    div.className = 'plan-step';
+    div.innerHTML = `
+      <div class="plan-num">${i + 1}</div>
+      <div class="plan-text"><strong>${step.title}</strong><span>${step.desc}</span></div>`;
+    planEl.appendChild(div);
+  });
+}
+
+function buildZones() {
+  const zones = [];
+
+  // prices
+  const prices = answers['prices'];
+  if (prices === 'none' || prices === 'nodirect') {
+    zones.push({ level: 'red', name: 'Отсутствие цен', text: 'Клиент не видит цену → не доверяет → уходит. 72% людей не напишут в директ чтобы узнать стоимость.' });
+  } else if (prices === 'partial') {
+    zones.push({ level: 'yellow', name: 'Неполный прайс', text: 'Часть услуг без цен. Клиент сравнивает вас с конкурентами и чаще выбирает того, кто прозрачен.' });
+  } else {
+    zones.push({ level: 'green', name: 'Цены открыты', text: 'Прайс есть — это снимает главный барьер. Так держать.' });
+  }
+
+  // reviews
+  const reviews = answers['reviews'];
+  if (reviews === 'none') {
+    zones.push({ level: 'red', name: 'Нет отзывов', text: 'Отзывы — это социальное доказательство. Без них клиент не может вам доверять, особенно новый.' });
+  } else if (reviews === 'rare') {
+    zones.push({ level: 'yellow', name: 'Мало отзывов', text: 'Несколько отзывов лучше нуля, но 3–5 отзывов всё ещё недостаточно чтобы снять тревогу нового клиента.' });
+  } else {
+    zones.push({ level: 'green', name: 'Отзывы есть', text: 'Социальное доказательство работает — продолжайте собирать и публиковать.' });
+  }
+
+  // speed
+  const speed = answers['speed'];
+  if (speed === 'slow') {
+    zones.push({ level: 'red', name: 'Медленный ответ', text: 'Клиент написал — не получил ответ быстро — записался к конкуренту. Каждый час промедления = потерянный человек.' });
+  } else if (speed === 'hours') {
+    zones.push({ level: 'yellow', name: 'Скорость ответа', text: 'Несколько часов — это пограничная зона. Часть клиентов ждёт, часть уходит. Цель — до 30 минут.' });
+  }
+
+  // booking
+  const booking = answers['booking'];
+  if (booking === 'unclear') {
+    zones.push({ level: 'red', name: 'Непонятно как записаться', text: 'Если клиент не понимает следующий шаг — он не делает его. Кнопка или чёткая инструкция обязательна.' });
+  } else if (booking === 'hard') {
+    zones.push({ level: 'red', name: 'Сложная запись + медленный ответ', text: 'Двойной барьер: нужно писать и долго ждать ответа. Конверсия падает в 2–3 раза.' });
+  } else if (booking === 'direct') {
+    zones.push({ level: 'yellow', name: 'Запись через директ', text: 'Работает, если отвечаете быстро. Подумайте о боте или онлайн-записи для снятия этого шага.' });
+  }
+
+  // content
+  const content = answers['content'];
+  if (content === 'rare') {
+    zones.push({ level: 'red', name: 'Редкий контент', text: 'Страница "мертва" — новый клиент видит последний пост месяц назад и думает: "Работает ли этот мастер вообще?"' });
+  } else if (content === 'week1') {
+    zones.push({ level: 'yellow', name: 'Мало публикаций', text: 'Раз в неделю — минимум. Алгоритмы и клиенты любят активные аккаунты.' });
+  }
+
+  return zones.slice(0, 5);
+}
+
+function buildPlan() {
+  const plan = [];
+
+  const prices  = answers['prices'];
+  const reviews = answers['reviews'];
+  const speed   = answers['speed'];
+  const booking = answers['booking'];
+  const content = answers['content'];
+
+  if (prices === 'none' || prices === 'nodirect') {
+    plan.push({ title: 'Опубликуйте прайс сегодня', desc: 'Минимум: услуга + "от N рублей". Даже приблизительная цена лучше её отсутствия.' });
+  }
+  if (reviews === 'none' || reviews === 'rare') {
+    plan.push({ title: 'Соберите 5 отзывов за 3 дня', desc: 'Напишите 5 постоянным клиентам: "Оставьте, пожалуйста, отзыв — буду благодарна". 80% соглашаются.' });
+  }
+  if (speed === 'slow' || speed === 'hours') {
+    plan.push({ title: 'Настройте автоответ или напоминание', desc: 'Напишите авто-приветствие в директ + поставьте напоминание проверять сообщения каждые 30 мин в рабочее время.' });
+  }
+  if (booking === 'unclear' || booking === 'hard') {
+    plan.push({ title: 'Добавьте чёткий призыв к действию в шапку', desc: 'Одна фраза: "Запись: напишите мне" или ссылка на WhatsApp/бота. Клиент должен видеть это сразу.' });
+  }
+  if (content === 'rare' || content === 'week1') {
+    plan.push({ title: 'Запланируйте 3 поста на эту неделю', desc: 'Фото работы + коротко о процессе. Не нужно идеально — нужно регулярно.' });
+  }
+
+  // fallback
+  if (plan.length < 2) {
+    plan.push({ title: 'Добавьте оффер для новых клиентов', desc: 'Небольшой бонус при первом визите увеличивает конверсию на 20–40%.' });
+    plan.push({ title: 'Попросите клиентов отметить вас в сторис', desc: 'UGC (пользовательский контент) — самое доверенное социальное доказательство.' });
+  }
+
+  return plan.slice(0, 5);
+}
+</script>
+</body>
+</html>

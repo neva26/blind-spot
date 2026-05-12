@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Карта потерь — AI-квиз для салонов красоты</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #09090f;
+      --surface:#13131f;
+      --card:   #1a1a2e;
+      --border: rgba(255,255,255,0.07);
+      --a1: #ff6fd8;
+      --a2: #a259ff;
+      --a3: #4ecdc4;
+      --red:    #ff5c5c;
+      --yellow: #ffd166;
+      --green:  #4ecdc4;
+      --text: #efefef;
+      --muted: #777;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── orbs ── */
+    .bg-orbs { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+    .orb { position: absolute; border-radius: 50%; filter: blur(130px); opacity: 0.15; }
+    .orb1 { width: 600px; height: 600px; background: var(--a1); top: -200px; left: -200px; animation: o1 14s ease-in-out infinite alternate; }
+    .orb2 { width: 500px; height: 500px; background: var(--a2); bottom: -160px; right: -160px; animation: o2 18s ease-in-out infinite alternate; }
+    .orb3 { width: 360px; height: 360px; background: var(--a3); top: 45%; left: 50%; transform: translate(-50%,-50%); animation: o3 20s ease-in-out infinite alternate; }
+    @keyframes o1 { to { transform: translate(70px,90px) scale(1.1); } }
+    @keyframes o2 { to { transform: translate(-60px,-60px) scale(1.12); } }
+    @keyframes o3 { to { transform: translate(-50%,-50%) scale(1.2); } }
+
+    /* ── shared ── */
+    .wrap { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 0 24px; }
+    .grad {
+      background: linear-gradient(120deg, var(--a1) 0%, var(--a2) 50%, var(--a3) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .section-label { text-align: center; font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+    .section-title { text-align: center; font-size: clamp(1.7rem, 4vw, 2.5rem); font-weight: 700; letter-spacing: -0.5px; margin-bottom: 48px; line-height: 1.2; }
+
+    /* ── CTA button ── */
+    .cta {
+      display: inline-flex; align-items: center; justify-content: center; gap: 11px;
+      padding: 17px 38px; border-radius: 100px;
+      background: linear-gradient(120deg, var(--a1), var(--a2));
+      color: #fff; font-size: 1.05rem; font-weight: 700;
+      text-decoration: none; border: none; cursor: pointer;
+      letter-spacing: 0.02em; position: relative; overflow: hidden;
+      box-shadow: 0 0 0 0 rgba(255,111,216,0.5);
+      animation: ctaPulse 2.4s ease-in-out infinite;
+      transition: transform 0.2s ease;
+    }
+    .cta::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(120deg, transparent 35%, rgba(255,255,255,0.18) 50%, transparent 65%);
+      transform: translateX(-100%); transition: transform 0.55s ease;
+    }
+    .cta:hover { transform: translateY(-3px) scale(1.02); animation: none; box-shadow: 0 8px 32px rgba(162,89,255,0.5); }
+    .cta:hover::before { transform: translateX(100%); }
+    .cta:active { transform: scale(0.97); }
+    @keyframes ctaPulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(255,111,216,0.5); }
+      50%      { box-shadow: 0 0 0 18px rgba(255,111,216,0); }
+    }
+    .cta svg { flex-shrink: 0; }
+
+    /* reveal */
+    .reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* ════════════════════════════════
+       HERO
+    ════════════════════════════════ */
+    .hero {
+      min-height: 100svh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 100px 0 70px;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 18px; border-radius: 100px;
+      background: rgba(162,89,255,0.12); border: 1px solid rgba(162,89,255,0.3);
+      font-size: 0.8rem; letter-spacing: 0.08em; color: var(--a2); text-transform: uppercase;
+      margin-bottom: 30px; animation: fadeUp 0.6s ease both;
+    }
+    .badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--a1); animation: bdot 2s ease-in-out infinite; }
+    @keyframes bdot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+
+    .hero-title {
+      font-size: clamp(2.4rem, 7vw, 4.2rem); font-weight: 800;
+      letter-spacing: -2px; line-height: 1.1; margin-bottom: 14px;
+      animation: fadeUp 0.7s 0.1s ease both;
+    }
+    .hero-sub {
+      font-size: clamp(1rem, 2.5vw, 1.25rem); color: var(--muted);
+      max-width: 560px; margin: 0 auto 18px; animation: fadeUp 0.7s 0.2s ease both;
+    }
+    .hero-sub span { color: var(--text); font-weight: 500; }
+    .hero-time {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 0.88rem; color: var(--muted); margin-bottom: 44px;
+      animation: fadeUp 0.7s 0.3s ease both;
+    }
+    .hero-time svg { color: var(--a3); }
+    .hero-cta { animation: fadeUp 0.7s 0.4s ease both; }
+    .cta-hint { margin-top: 15px; font-size: 0.78rem; color: #555; }
+    .cta-hint a { color: var(--a2); text-decoration: none; }
+    .cta-hint a:hover { text-decoration: underline; }
+
+    @keyframes fadeUp { from{opacity:0;transform:translateY(22px)} to{opacity:1;transform:translateY(0)} }
+
+    /* ════════════════════════════════
+       FOR WHOM
+    ════════════════════════════════ */
+    .forwho { padding: 88px 0; }
+    .fw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 18px; }
+    .fw-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+      padding: 28px 24px; position: relative; overflow: hidden;
+      transition: transform 0.25s, box-shadow 0.25s;
+    }
+    .fw-card::before {
+      content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+      background: linear-gradient(135deg, var(--a1), var(--a2), var(--a3));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      opacity: 0; transition: opacity 0.25s;
+    }
+    .fw-card:hover { transform: translateY(-6px); box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
+    .fw-card:hover::before { opacity: 0.55; }
+    .fw-icon {
+      width: 50px; height: 50px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center; margin-bottom: 16px;
+    }
+    .fw-icon.pink { background: rgba(255,111,216,0.12); }
+    .fw-icon.purp { background: rgba(162,89,255,0.12); }
+    .fw-icon.teal { background: rgba(78,205,196,0.12); }
+    .fw-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
+    .fw-text  { font-size: 0.85rem; color: var(--muted); line-height: 1.55; }
+
+    /* ════════════════════════════════
+       BENEFITS
+    ════════════════════════════════ */
+    .benefits { padding: 88px 0; }
+    .ben-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 18px; }
+    .ben-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+      padding: 30px 26px; position: relative; overflow: hidden;
+      transition: transform 0.25s, box-shadow 0.25s;
+    }
+    .ben-card:hover { transform: translateY(-6px); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+    .ben-icon { width: 54px; height: 54px; border-radius: 15px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; }
+    .ben-icon.b1 { background: rgba(255,111,216,0.12); }
+    .ben-icon.b2 { background: rgba(162,89,255,0.12); }
+    .ben-icon.b3 { background: rgba(78,205,196,0.12); }
+    .ben-icon svg { width: 26px; height: 26px; }
+    .ben-num { position: absolute; top: 20px; right: 20px; font-size: 3rem; font-weight: 800; opacity: 0.05; line-height: 1; }
+    .ben-title { font-size: 1.08rem; font-weight: 700; margin-bottom: 9px; }
+    .ben-text  { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+
+    /* ════════════════════════════════
+       HOW IT WORKS
+    ════════════════════════════════ */
+    .how { padding: 88px 0; }
+    .steps { display: flex; flex-direction: column; max-width: 620px; margin: 0 auto; }
+    .step { display: flex; gap: 22px; padding-bottom: 38px; position: relative; }
+    .step:not(:last-child)::before {
+      content: ''; position: absolute; left: 20px; top: 44px; bottom: 0;
+      width: 2px; background: linear-gradient(to bottom, var(--a2), transparent);
+    }
+    .step-num {
+      flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%;
+      border: 2px solid var(--a2); display: flex; align-items: center; justify-content: center;
+      font-weight: 800; color: var(--a2); background: var(--bg);
+    }
+    .step-body { padding-top: 9px; }
+    .step-title { font-size: 1rem; font-weight: 600; margin-bottom: 4px; }
+    .step-text  { font-size: 0.86rem; color: var(--muted); }
+
+    /* ════════════════════════════════
+       QUIZ SECTION
+    ════════════════════════════════ */
+    .quiz-section { padding: 60px 0 100px; }
+    .quiz-section .section-label { margin-bottom: 10px; }
+    .quiz-section .section-title { margin-bottom: 36px; }
+
+    .quiz-box {
+      max-width: 640px; margin: 0 auto;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 28px;
+      padding: 48px 44px; position: relative; overflow: hidden;
+    }
+    .quiz-box::before {
+      content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+      background: linear-gradient(135deg, var(--a1), var(--a2), var(--a3));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      opacity: 0.35; pointer-events: none;
+    }
+
+    /* progress */
+    .prog-wrap { margin-bottom: 34px; display: none; }
+    .prog-meta { display: flex; justify-content: space-between; font-size: 0.77rem; color: var(--muted); margin-bottom: 9px; }
+    .prog-track { height: 4px; background: rgba(255,255,255,0.07); border-radius: 100px; overflow: hidden; }
+    .prog-fill  { height: 100%; border-radius: 100px; background: linear-gradient(90deg, var(--a1), var(--a2)); transition: width 0.5s cubic-bezier(.22,1,.36,1); }
+
+    /* screens */
+    .qscreen { display: none; animation: fadeIn 0.38s ease both; }
+    .qscreen.active { display: block; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+
+    /* start screen */
+    .qs-emoji { font-size: 3rem; margin-bottom: 14px; }
+    .qs-title { font-size: clamp(1.6rem, 5vw, 2.2rem); font-weight: 800; letter-spacing: -1px; line-height: 1.15; margin-bottom: 12px; }
+    .qs-sub   { color: var(--muted); font-size: 0.93rem; margin-bottom: 28px; line-height: 1.6; }
+    .qs-sub strong { color: var(--text); }
+    .chips    { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 34px; }
+    .chip     { display: inline-flex; align-items: center; gap: 7px; padding: 5px 14px; border-radius: 100px; background: rgba(162,89,255,0.1); border: 1px solid rgba(162,89,255,0.25); font-size: 0.79rem; color: var(--a2); }
+    .chip svg { width: 13px; height: 13px; }
+
+    /* question */
+    .q-label { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 9px; }
+    .q-text  { font-size: clamp(1.05rem, 3vw, 1.25rem); font-weight: 700; line-height: 1.35; margin-bottom: 10px; }
+    .q-hint  { font-size: 0.79rem; color: var(--muted); margin-bottom: 22px; }
+
+    .opts { display: flex; flex-direction: column; gap: 9px; }
+    .opt {
+      display: flex; align-items: center; gap: 13px;
+      padding: 13px 17px; border-radius: 13px;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      cursor: pointer; font-size: 0.91rem;
+      transition: background .18s, border-color .18s, transform .18s;
+      user-select: none;
+    }
+    .opt:hover { background: rgba(162,89,255,0.08); border-color: rgba(162,89,255,0.3); transform: translateX(4px); }
+    .opt.selected { background: rgba(162,89,255,0.13); border-color: rgba(162,89,255,0.5); }
+    .opt-radio { flex-shrink:0; width:20px; height:20px; border-radius:50%; border:2px solid var(--muted); display:flex; align-items:center; justify-content:center; transition:border-color .18s; }
+    .opt.selected .opt-radio { border-color: var(--a2); }
+    .opt-radio-inner { width:10px; height:10px; border-radius:50%; background:var(--a2); opacity:0; transform:scale(0); transition:opacity .18s,transform .18s; }
+    .opt.selected .opt-radio-inner { opacity:1; transform:scale(1); }
+    .opt-check { flex-shrink:0; width:20px; height:20px; border-radius:6px; border:2px solid var(--muted); display:flex; align-items:center; justify-content:center; transition:border-color .18s,background .18s; }
+    .opt.selected .opt-check { background:var(--a2); border-color:var(--a2); }
+    .opt-check svg { opacity:0; transition:opacity .18s; }
+    .opt.selected .opt-check svg { opacity:1; }
+
+    /* nav */
+    .nav { display: flex; align-items: center; gap: 11px; margin-top: 28px; }
+    .btn-back {
+      display: flex; align-items: center; gap: 7px;
+      padding: 12px 18px; border-radius: 12px;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--muted); font-size: 0.86rem; cursor: pointer;
+      transition: border-color .18s, color .18s; white-space: nowrap;
+    }
+    .btn-back:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+    .btn-next {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px;
+      padding: 14px 26px; border-radius: 14px;
+      background: linear-gradient(120deg, var(--a1), var(--a2));
+      color: #fff; font-size: 0.97rem; font-weight: 700;
+      border: none; cursor: pointer;
+      transition: transform .18s, box-shadow .18s, opacity .18s;
+      box-shadow: 0 4px 20px rgba(162,89,255,0.3);
+    }
+    .btn-next:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(162,89,255,0.45); }
+    .btn-next:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* results */
+    .res-header { text-align: center; margin-bottom: 30px; }
+    .loss-meter { width: 138px; height: 138px; margin: 0 auto 16px; position: relative; }
+    .loss-meter svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .loss-track { fill:none; stroke:rgba(255,255,255,0.06); stroke-width:10; }
+    .loss-fill  { fill:none; stroke-width:10; stroke-linecap:round; transition:stroke-dashoffset 1.2s cubic-bezier(.22,1,.36,1); }
+    .loss-label { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .loss-pct  { font-size:2rem; font-weight:800; line-height:1; }
+    .loss-word { font-size:0.7rem; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; margin-top:3px; }
+    .res-title { font-size:clamp(1.25rem,4vw,1.8rem); font-weight:800; line-height:1.2; margin-bottom:7px; }
+    .res-sub   { color:var(--muted); font-size:0.86rem; }
+
+    .divider { height:1px; background:var(--border); margin:26px 0; }
+
+    .zones-title { font-size:0.74rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); margin-bottom:14px; }
+    .zones { display:flex; flex-direction:column; gap:11px; margin-bottom:26px; }
+    .zone { border-radius:14px; padding:13px 17px; border:1px solid transparent; }
+    .zone.red    { background:rgba(255,92,92,.08);   border-color:rgba(255,92,92,.2); }
+    .zone.yellow { background:rgba(255,209,102,.08); border-color:rgba(255,209,102,.2); }
+    .zone.green  { background:rgba(78,205,196,.08);  border-color:rgba(78,205,196,.2); }
+    .zone-head { display:flex; align-items:center; gap:9px; margin-bottom:3px; }
+    .zone-dot  { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .zone.red    .zone-dot { background:var(--red); }
+    .zone.yellow .zone-dot { background:var(--yellow); }
+    .zone.green  .zone-dot { background:var(--green); }
+    .zone-tag { font-size:0.7rem; text-transform:uppercase; letter-spacing:.08em; font-weight:600; }
+    .zone.red    .zone-tag { color:var(--red); }
+    .zone.yellow .zone-tag { color:var(--yellow); }
+    .zone.green  .zone-tag { color:var(--green); }
+    .zone-name { font-weight:600; font-size:0.93rem; }
+    .zone-text { font-size:0.81rem; color:var(--muted); line-height:1.5; margin-top:3px; }
+
+    .plan-title { font-size:0.74rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); margin-bottom:14px; }
+    .plan-steps { display:flex; flex-direction:column; gap:9px; margin-bottom:30px; }
+    .plan-step  { display:flex; gap:13px; align-items:flex-start; padding:13px 15px; border-radius:13px; background:rgba(255,255,255,0.03); border:1px solid var(--border); }
+    .plan-num   { flex-shrink:0; width:27px; height:27px; border-radius:8px; background:linear-gradient(135deg,var(--a1),var(--a2)); display:flex; align-items:center; justify-content:center; font-size:0.76rem; font-weight:800; color:#fff; }
+    .plan-text  { font-size:0.85rem; line-height:1.5; padding-top:3px; }
+    .plan-text strong { color:var(--text); display:block; margin-bottom:2px; }
+    .plan-text span   { color:var(--muted); }
+
+    .res-cta { text-align:center; }
+    .res-cta p { font-size:0.84rem; color:var(--muted); margin-bottom:16px; line-height:1.55; }
+    .res-cta p strong { color:var(--text); }
+    .btn-tg {
+      display:inline-flex; align-items:center; justify-content:center; gap:10px; width:100%;
+      padding:15px 30px; border-radius:16px; background:linear-gradient(120deg,var(--a1),var(--a2));
+      color:#fff; font-size:0.97rem; font-weight:700; text-decoration:none; border:none; cursor:pointer;
+      box-shadow:0 0 0 0 rgba(255,111,216,.5); animation:ctaPulse 2.4s ease-in-out infinite;
+      transition:transform .2s;
+    }
+    .btn-tg:hover { transform:translateY(-2px); animation:none; box-shadow:0 8px 32px rgba(162,89,255,.5); }
+    .res-hint { margin-top:13px; font-size:0.76rem; color:#444; }
+    .res-hint a { color:var(--a2); text-decoration:none; }
+    .res-hint a:hover { text-decoration:underline; }
+    .btn-restart { background:none; border:none; color:var(--muted); font-size:0.78rem; cursor:pointer; margin-top:13px; text-decoration:underline; display:block; margin-left:auto; margin-right:auto; }
+    .btn-restart:hover { color:var(--text); }
+
+    /* ── footer ── */
+    footer { padding: 40px 0; text-align: center; border-top: 1px solid var(--border); font-size: 0.79rem; color: #444; position: relative; z-index: 1; }
+    footer a { color: var(--a2); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ── responsive ── */
+    @media (max-width: 560px) {
+      .quiz-box { padding: 30px 20px; border-radius: 20px; }
+      .nav { flex-direction: column-reverse; }
+      .btn-back { width: 100%; justify-content: center; }
+      .hero { padding: 90px 0 60px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+
+<!-- ════════════════════════════════
+     HERO
+════════════════════════════════ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="badge"><span class="badge-dot"></span> AI-квиз · Бесплатно · 5 минут</div>
+
+    <h1 class="hero-title"><span class="grad">Карта потерь</span><br>вашего салона</h1>
+
+    <p class="hero-sub">
+      Узнайте, почему клиенты <span>смотрят на вашу страницу, но не записываются</span> —
+      и получите готовый план как это исправить
+    </p>
+
+    <div class="hero-time">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Займёт всего 5 минут
+    </div>
+
+    <div class="hero-cta">
+      <a class="cta" href="#quiz" onclick="scrollToQuiz()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Найти мои потери
+      </a>
+      <div class="cta-hint">
+        Бесплатно, без регистрации &nbsp;·&nbsp;
+        <a href="https://t.me/marinastankina" target="_blank" rel="noopener">Написать в Telegram</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     FOR WHOM
+════════════════════════════════ -->
+<section class="forwho" style="padding:88px 0;">
+  <div class="wrap">
+    <p class="section-label reveal">Для кого</p>
+    <h2 class="section-title reveal">Кому подойдёт квиз?</h2>
+    <div class="fw-grid">
+
+      <div class="fw-card reveal">
+        <div class="fw-icon pink">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ff6fd8" stroke-width="2" stroke-linecap="round">
+            <path d="M12 2a5 5 0 1 1 0 10A5 5 0 0 1 12 2zm0 12c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z"/>
+          </svg>
+        </div>
+        <div class="fw-title">Салоны красоты</div>
+        <div class="fw-text">Маникюр, педикюр, брови, ресницы, стрижки — если соцсети есть, а запись не идёт, квиз покажет где дыры</div>
+      </div>
+
+      <div class="fw-card reveal">
+        <div class="fw-icon purp">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#a259ff" stroke-width="2" stroke-linecap="round">
+            <path d="M12 22s8-4 8-10V4l-8-2-8 2v8c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <div class="fw-title">Массажные кабинеты</div>
+        <div class="fw-text">Клиент ушёл думать и не вернулся. Квиз найдёт причину и даст скрипт как это исправить</div>
+      </div>
+
+      <div class="fw-card reveal">
+        <div class="fw-icon teal">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4ecdc4" stroke-width="2" stroke-linecap="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </div>
+        <div class="fw-title">Мастера и студии</div>
+        <div class="fw-text">Работаете самостоятельно? Квиз выявит что именно отпугивает в вашей упаковке, прайсе или подаче</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     BENEFITS
+════════════════════════════════ -->
+<section class="benefits" style="padding:88px 0;">
+  <div class="wrap">
+    <p class="section-label reveal">Преимущества</p>
+    <h2 class="section-title reveal">Что вы получите?</h2>
+    <div class="ben-grid">
+
+      <div class="ben-card reveal">
+        <div class="ben-num">1</div>
+        <div class="ben-icon b1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#ff6fd8" stroke-width="2" stroke-linecap="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+        <div class="ben-title">Точная карта слабых мест</div>
+        <div class="ben-text">AI анализирует ответы и находит конкретные «дыры»: непонятное описание, нет цен, нет отзывов, слабый призыв к действию</div>
+      </div>
+
+      <div class="ben-card reveal">
+        <div class="ben-num">2</div>
+        <div class="ben-icon b2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#a259ff" stroke-width="2" stroke-linecap="round">
+            <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
+        </div>
+        <div class="ben-title">Готовый план исправлений</div>
+        <div class="ben-text">Никаких общих советов — только конкретные шаги: что переписать, что добавить, как оформить. Под ваш тип бизнеса</div>
+      </div>
+
+      <div class="ben-card reveal">
+        <div class="ben-num">3</div>
+        <div class="ben-icon b3">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#4ecdc4" stroke-width="2" stroke-linecap="round">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </div>
+        <div class="ben-title">Результат за 5 минут</div>
+        <div class="ben-text">Не нужен консультант или аудит. Прошли квиз — получили отчёт — знаете что делать прямо сегодня</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     HOW IT WORKS
+════════════════════════════════ -->
+<section class="how" style="padding:88px 0;">
+  <div class="wrap">
+    <p class="section-label reveal">Как это работает</p>
+    <h2 class="section-title reveal">Три шага к первым записям</h2>
+    <div class="steps">
+
+      <div class="step reveal">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Отвечаете на 9 вопросов</div>
+          <div class="step-text">Про ваш бизнес, страницу, как приходят клиенты и где вы их теряете. Всё просто, без терминов</div>
+        </div>
+      </div>
+
+      <div class="step reveal">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">AI строит вашу «Карту потерь»</div>
+          <div class="step-text">Алгоритм анализирует паттерны и находит узкие места — где именно клиенты уходят</div>
+        </div>
+      </div>
+
+      <div class="step reveal">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Получаете персональный план</div>
+          <div class="step-text">Конкретные правки под ваш аккаунт + разбор лично с Мариной в Telegram, если хотите глубже</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     QUIZ (embedded)
+════════════════════════════════ -->
+<section class="quiz-section" id="quiz">
+  <div class="wrap">
+    <p class="section-label reveal">Квиз</p>
+    <h2 class="section-title reveal">Пройдите квиз — узнайте свои потери</h2>
+
+    <div class="quiz-box reveal">
+
+      <!-- progress bar -->
+      <div class="prog-wrap" id="progWrap">
+        <div class="prog-meta">
+          <span id="progLabel">Вопрос 1 из 9</span>
+          <span id="progPct">0%</span>
+        </div>
+        <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+      </div>
+
+      <!-- START -->
+      <div class="qscreen active" id="qs-start">
+        <div class="qs-emoji">🗺️</div>
+        <h3 class="qs-title"><span class="grad">Карта потерь</span><br>вашего салона</h3>
+        <p class="qs-sub">Ответьте на <strong>9 вопросов</strong> — AI покажет, где именно вы теряете клиентов, которые уже нашли вашу страницу, и что исправить в первую очередь.</p>
+        <div class="chips">
+          <span class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            5 минут
+          </span>
+          <span class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Бесплатно
+          </span>
+          <span class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            Готовый план
+          </span>
+        </div>
+        <button class="btn-next" style="width:100%" onclick="startQuiz()">
+          Начать квиз
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
+
+      <!-- QUESTION (rendered by JS) -->
+      <div class="qscreen" id="qs-question">
+        <div class="q-label" id="qLabel"></div>
+        <div class="q-text"  id="qText"></div>
+        <div class="q-hint"  id="qHint"></div>
+        <div class="opts"    id="qOpts"></div>
+        <div class="nav">
+          <button class="btn-back" id="btnBack" onclick="prevQ()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            Назад
+          </button>
+          <button class="btn-next" id="btnNext" disabled onclick="nextQ()">Далее</button>
+        </div>
+      </div>
+
+      <!-- RESULT (rendered by JS) -->
+      <div class="qscreen" id="qs-result">
+        <div class="res-header">
+          <div class="loss-meter">
+            <svg viewBox="0 0 120 120">
+              <circle class="loss-track" cx="60" cy="60" r="50"/>
+              <circle class="loss-fill" id="lossFill" cx="60" cy="60" r="50" stroke-dasharray="314" stroke-dashoffset="314"/>
+            </svg>
+            <div class="loss-label">
+              <span class="loss-pct" id="lossPct">—</span>
+              <span class="loss-word">потерь</span>
+            </div>
+          </div>
+          <h3 class="res-title" id="resTitle"></h3>
+          <p  class="res-sub"   id="resSub"></p>
+        </div>
+
+        <div class="divider"></div>
+        <div class="zones-title">Найденные проблемные зоны</div>
+        <div class="zones" id="resZones"></div>
+
+        <div class="divider"></div>
+        <div class="plan-title">Ваш план на ближайшие 7 дней</div>
+        <div class="plan-steps" id="resPlan"></div>
+
+        <div class="res-cta">
+          <p>Хотите <strong>разобрать ваш случай лично</strong>?<br>Марина покажет конкретные правки под ваш аккаунт.</p>
+          <a class="btn-tg" href="https://t.me/marinastankina" target="_blank" rel="noopener">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+            Разобрать мой случай в Telegram
+          </a>
+          <div class="res-hint">
+            Или задайте вопрос: <a href="https://t.me/marinastankina" target="_blank" rel="noopener">@marinastankina</a>
+          </div>
+          <button class="btn-restart" onclick="restartQuiz()">Пройти заново</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════
+     FOOTER
+════════════════════════════════ -->
+<footer>
+  <div class="wrap">
+    <p>© 2025 Карта потерь · Бизнес-консультант <a href="https://t.me/marinastankina" target="_blank" rel="noopener">Станкина Марина</a></p>
+  </div>
+</footer>
+
+<!-- ════════════════════════════════
+     SCRIPTS
+════════════════════════════════ -->
+<script>
+/* ── Scroll reveal ── */
+const revealObserver = new IntersectionObserver(
+  entries => entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); revealObserver.unobserve(e.target); } }),
+  { threshold: 0.12 }
+);
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+function scrollToQuiz() {
+  document.getElementById('quiz').scrollIntoView({ behavior: 'smooth' });
+}
+
+/* ════════════════════════════════
+   QUIZ LOGIC
+════════════════════════════════ */
+const questions = [
+  {
+    id: 'business', text: 'Какой у вас тип бизнеса?', type: 'single',
+    options: [
+      { label: '💅 Салон красоты / студия ногтей', value: 'salon' },
+      { label: '💆 Массажный кабинет / spa',        value: 'massage' },
+      { label: '✂️ Парикмахерская / барбершоп',     value: 'barber' },
+      { label: '🌿 Косметолог / мастер по уходу',   value: 'cosmo' },
+    ]
+  },
+  {
+    id: 'source', text: 'Откуда сейчас приходят клиенты?', hint: 'Можно выбрать несколько', type: 'multi',
+    options: [
+      { label: '📸 Instagram / Reels', value: 'instagram' },
+      { label: '💬 ВКонтакте',         value: 'vk' },
+      { label: '✈️ Telegram-канал',    value: 'telegram' },
+      { label: '🗣️ Только сарафанное радио', value: 'word' },
+      { label: '🔍 Google / 2ГИС / Яндекс', value: 'geo' },
+      { label: '🛒 Авито / Юла',       value: 'avito' },
+    ]
+  },
+  {
+    id: 'views', text: 'Сколько людей в месяц просматривают вашу страницу?', type: 'single',
+    options: [
+      { label: 'Меньше 100 просмотров',         value: 'low',     score: 3 },
+      { label: '100 – 500 просмотров',           value: 'mid',     score: 2 },
+      { label: '500 – 2 000 просмотров',         value: 'high',    score: 1 },
+      { label: 'Больше 2 000 просмотров',        value: 'veryhigh',score: 0 },
+      { label: 'Не отслеживаю / не знаю',       value: 'unknown', score: 3 },
+    ]
+  },
+  {
+    id: 'conversion', text: 'Какой примерно % смотрящих записывается?', type: 'single',
+    options: [
+      { label: 'Почти никто — меньше 1%',          value: 'none',    score: 4 },
+      { label: '1 – 3%',                            value: 'low',     score: 3 },
+      { label: '3 – 7%',                            value: 'mid',     score: 1 },
+      { label: 'Больше 7% — запись есть стабильно', value: 'good',    score: 0 },
+      { label: 'Не знаю / не считал(а)',            value: 'unknown', score: 4 },
+    ]
+  },
+  {
+    id: 'prices', text: 'Есть ли цены на вашей странице?', type: 'single',
+    options: [
+      { label: '✅ Да — полный понятный прайс', value: 'full',     score: 0 },
+      { label: '🔸 Частично — некоторые услуги', value: 'partial',  score: 2 },
+      { label: '❌ Нет — пишите в директ',       value: 'nodirect', score: 4 },
+      { label: '❌ Нет вообще',                   value: 'none',    score: 4 },
+    ]
+  },
+  {
+    id: 'reviews', text: 'Есть ли отзывы клиентов на вашей странице?', type: 'single',
+    options: [
+      { label: '⭐⭐⭐ Да — много живых отзывов', value: 'many', score: 0 },
+      { label: '⭐ Есть несколько',               value: 'few',  score: 2 },
+      { label: '🕊 Почти нет',                    value: 'rare', score: 3 },
+      { label: '❌ Нет отзывов совсем',           value: 'none', score: 4 },
+    ]
+  },
+  {
+    id: 'speed', text: 'Как быстро вы отвечаете на входящие сообщения?', type: 'single',
+    options: [
+      { label: '⚡ До 15 минут',                              value: 'fast',  score: 0 },
+      { label: '🕐 В течение часа',                           value: 'hour',  score: 1 },
+      { label: '🕓 Несколько часов',                          value: 'hours', score: 3 },
+      { label: '😬 Иногда забываю / на следующий день',       value: 'slow',  score: 4 },
+    ]
+  },
+  {
+    id: 'booking', text: 'Насколько легко клиенту у вас записаться?', type: 'single',
+    options: [
+      { label: '🟢 Есть кнопка или ссылка записи в шапке',          value: 'easy',    score: 0 },
+      { label: '🟡 Нужно написать в директ — отвечаю быстро',        value: 'direct',  score: 2 },
+      { label: '🔴 Нужно написать, но отвечаю не всегда оперативно', value: 'hard',    score: 4 },
+      { label: '❌ Непонятно как вообще записаться',                 value: 'unclear', score: 4 },
+    ]
+  },
+  {
+    id: 'content', text: 'Как часто вы публикуете контент / обновляете страницу?', type: 'single',
+    options: [
+      { label: '📅 Каждый день или через день',          value: 'daily', score: 0 },
+      { label: '📌 2–3 раза в неделю',                  value: 'week3', score: 1 },
+      { label: '📎 Раз в неделю или реже',               value: 'week1', score: 2 },
+      { label: '📦 Редко — иногда по месяцу тишина',    value: 'rare',  score: 4 },
+    ]
+  },
+];
+
+let current = 0;
+let answers = {};
+
+function showScreen(id) {
+  document.querySelectorAll('.qscreen').forEach(s => s.classList.remove('active'));
+  document.getElementById('qs-' + id).classList.add('active');
+}
+
+function startQuiz() {
+  current = 0; answers = {};
+  document.getElementById('progWrap').style.display = '';
+  showScreen('question');
+  renderQ();
+}
+
+function restartQuiz() {
+  document.getElementById('progWrap').style.display = 'none';
+  showScreen('start');
+  document.getElementById('quiz').scrollIntoView({ behavior: 'smooth' });
+}
+
+function hasAnswer(q) {
+  const a = answers[q.id];
+  return q.type === 'single' ? !!a : Array.isArray(a) && a.length > 0;
+}
+
+function prevQ() {
+  if (current > 0) { current--; renderQ(); }
+}
+
+function nextQ() {
+  if (!hasAnswer(questions[current])) return;
+  current++;
+  if (current >= questions.length) {
+    document.getElementById('progWrap').style.display = 'none';
+    showScreen('result');
+    renderResult();
+    document.getElementById('quiz').scrollIntoView({ behavior: 'smooth' });
+  } else {
+    renderQ();
+  }
+}
+
+function renderQ() {
+  const q = questions[current];
+  const total = questions.length;
+  const pct = Math.round((current / total) * 100);
+
+  document.getElementById('progLabel').textContent = `Вопрос ${current + 1} из ${total}`;
+  document.getElementById('progPct').textContent   = pct + '%';
+  document.getElementById('progFill').style.width  = pct + '%';
+
+  document.getElementById('qLabel').textContent = `Вопрос ${current + 1} из ${total}`;
+  document.getElementById('qText').textContent  = q.text;
+  document.getElementById('qHint').textContent  = q.hint || '';
+
+  const container = document.getElementById('qOpts');
+  container.innerHTML = '';
+
+  q.options.forEach(opt => {
+    const div = document.createElement('div');
+    div.className = 'opt';
+    const isSel = q.type === 'single'
+      ? answers[q.id] === opt.value
+      : (answers[q.id] || []).includes(opt.value);
+    if (isSel) div.classList.add('selected');
+
+    if (q.type === 'single') {
+      div.innerHTML = `<div class="opt-radio"><div class="opt-radio-inner"></div></div><span>${opt.label}</span>`;
+      div.onclick = () => {
+        answers[q.id] = opt.value;
+        container.querySelectorAll('.opt').forEach(o => o.classList.remove('selected'));
+        div.classList.add('selected');
+        document.getElementById('btnNext').disabled = false;
+      };
+    } else {
+      div.innerHTML = `<div class="opt-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div><span>${opt.label}</span>`;
+      div.onclick = () => {
+        if (!answers[q.id]) answers[q.id] = [];
+        const idx = answers[q.id].indexOf(opt.value);
+        if (idx === -1) { answers[q.id].push(opt.value); div.classList.add('selected'); }
+        else            { answers[q.id].splice(idx, 1);   div.classList.remove('selected'); }
+        document.getElementById('btnNext').disabled = !hasAnswer(q);
+      };
+    }
+    container.appendChild(div);
+  });
+
+  document.getElementById('btnBack').style.visibility = current === 0 ? 'hidden' : 'visible';
+  document.getElementById('btnNext').disabled = !hasAnswer(q);
+  const isLast = current === total - 1;
+  document.getElementById('btnNext').innerHTML = isLast
+    ? 'Показать карту потерь <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
+    : 'Далее <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+}
+
+/* ── Result ── */
+function calcScore() {
+  let t = 0;
+  questions.forEach(q => {
+    if (q.type !== 'single') return;
+    const c = q.options.find(o => o.value === answers[q.id]);
+    if (c && c.score !== undefined) t += c.score;
+  });
+  return t;
+}
+
+function renderResult() {
+  const score   = calcScore();
+  const lossPct = Math.min(95, Math.round((score / 27) * 100));
+
+  const circumference = 314;
+  const fill  = document.getElementById('lossFill');
+  const color = lossPct >= 60 ? '#ff5c5c' : lossPct >= 35 ? '#ffd166' : '#4ecdc4';
+  fill.style.stroke = color;
+  fill.style.strokeDashoffset = circumference;
+  setTimeout(() => { fill.style.strokeDashoffset = circumference - (circumference * lossPct / 100); }, 100);
+
+  document.getElementById('lossPct').textContent = lossPct + '%';
+  document.getElementById('lossPct').style.color = color;
+
+  let title, sub;
+  if (lossPct >= 65) {
+    title = 'Критические потери — большинство клиентов уходит';
+    sub   = 'Хорошая новость: есть несколько конкретных точек роста, которые дадут результат уже в ближайшие дни';
+  } else if (lossPct >= 35) {
+    title = 'Есть серьёзные пробелы в конверсии';
+    sub   = 'Вы уже что-то делаете правильно — но несколько зон сливают треть потенциальных клиентов';
+  } else {
+    title = 'Базово всё выстроено — можно работать над ростом';
+    sub   = 'Система есть. Теперь время для тонкой настройки и масштабирования';
+  }
+  document.getElementById('resTitle').textContent = title;
+  document.getElementById('resSub').textContent   = sub;
+
+  // zones
+  const zones = buildZones();
+  const zonesEl = document.getElementById('resZones');
+  zonesEl.innerHTML = '';
+  zones.forEach(z => {
+    const d = document.createElement('div');
+    d.className = 'zone ' + z.level;
+    d.innerHTML = `<div class="zone-head"><div class="zone-dot"></div><span class="zone-tag">${z.level==='red'?'Критично':z.level==='yellow'?'Важно':'Хорошо'}</span></div><div class="zone-name">${z.name}</div><div class="zone-text">${z.text}</div>`;
+    zonesEl.appendChild(d);
+  });
+
+  // plan
+  const plan = buildPlan();
+  const planEl = document.getElementById('resPlan');
+  planEl.innerHTML = '';
+  plan.forEach((step, i) => {
+    const d = document.createElement('div');
+    d.className = 'plan-step';
+    d.innerHTML = `<div class="plan-num">${i+1}</div><div class="plan-text"><strong>${step.title}</strong><span>${step.desc}</span></div>`;
+    planEl.appendChild(d);
+  });
+}
+
+function buildZones() {
+  const zones = [];
+  const { prices, reviews, speed, booking, content } = answers;
+
+  if (prices === 'none' || prices === 'nodirect')
+    zones.push({ level: 'red',    name: 'Отсутствие цен',           text: '72% клиентов не напишут в директ чтобы узнать стоимость — они просто уйдут к тому, у кого цена видна.' });
+  else if (prices === 'partial')
+    zones.push({ level: 'yellow', name: 'Неполный прайс',           text: 'Часть услуг без цен. Клиент сравнивает и чаще выбирает того, кто прозрачен.' });
+  else
+    zones.push({ level: 'green',  name: 'Цены открыты',             text: 'Прайс есть — это снимает главный барьер. Так держать.' });
+
+  if (reviews === 'none')
+    zones.push({ level: 'red',    name: 'Нет отзывов',              text: 'Без отзывов новый клиент не может вам доверять — это главное социальное доказательство.' });
+  else if (reviews === 'rare' || reviews === 'few')
+    zones.push({ level: 'yellow', name: 'Мало отзывов',             text: 'Несколько отзывов лучше нуля, но этого недостаточно чтобы снять тревогу нового клиента.' });
+  else
+    zones.push({ level: 'green',  name: 'Отзывы есть',              text: 'Социальное доказательство работает — продолжайте собирать и публиковать.' });
+
+  if (speed === 'slow')
+    zones.push({ level: 'red',    name: 'Медленный ответ',          text: 'Каждый час промедления = потерянный клиент. Конкурент ответил быстрее — запись ушла туда.' });
+  else if (speed === 'hours')
+    zones.push({ level: 'yellow', name: 'Скорость ответа',          text: 'Несколько часов — пограничная зона. Часть клиентов ждёт, часть уходит. Цель — до 30 минут.' });
+
+  if (booking === 'unclear')
+    zones.push({ level: 'red',    name: 'Непонятно как записаться', text: 'Если клиент не видит следующий шаг — он не делает его. Кнопка или чёткая инструкция обязательна.' });
+  else if (booking === 'hard')
+    zones.push({ level: 'red',    name: 'Сложная запись',           text: 'Двойной барьер: нужно написать и ждать долго. Конверсия падает в 2–3 раза.' });
+  else if (booking === 'direct')
+    zones.push({ level: 'yellow', name: 'Запись через директ',      text: 'Работает только при быстром ответе. Онлайн-запись или бот снимут этот барьер.' });
+
+  if (content === 'rare')
+    zones.push({ level: 'red',    name: 'Редкий контент',           text: 'Страница "мертва" — новый клиент видит последний пост месяц назад и думает, работает ли мастер вообще.' });
+  else if (content === 'week1')
+    zones.push({ level: 'yellow', name: 'Мало публикаций',          text: 'Раз в неделю — минимум. Алгоритмы и клиенты любят активные аккаунты.' });
+
+  return zones.slice(0, 5);
+}
+
+function buildPlan() {
+  const plan = [];
+  const { prices, reviews, speed, booking, content } = answers;
+
+  if (prices === 'none' || prices === 'nodirect')
+    plan.push({ title: 'Опубликуйте прайс сегодня', desc: 'Минимум: услуга + «от N рублей». Даже приблизительная цена лучше её отсутствия.' });
+  if (reviews === 'none' || reviews === 'rare')
+    plan.push({ title: 'Соберите 5 отзывов за 3 дня', desc: 'Напишите 5 постоянным клиентам: «Оставьте отзыв — буду благодарна». 80% соглашаются.' });
+  if (speed === 'slow' || speed === 'hours')
+    plan.push({ title: 'Настройте автоответ или напоминание', desc: 'Напишите авто-приветствие в директ и поставьте напоминание проверять сообщения каждые 30 мин.' });
+  if (booking === 'unclear' || booking === 'hard')
+    plan.push({ title: 'Добавьте CTA в шапку профиля', desc: 'Одна фраза: «Запись: напишите мне» или ссылка на WhatsApp/бота. Клиент должен видеть это сразу.' });
+  if (content === 'rare' || content === 'week1')
+    plan.push({ title: 'Запланируйте 3 поста на эту неделю', desc: 'Фото работы + коротко о процессе. Не нужно идеально — нужно регулярно.' });
+
+  if (plan.length < 2) {
+    plan.push({ title: 'Добавьте оффер для новых клиентов', desc: 'Небольшой бонус при первом визите увеличивает конверсию на 20–40%.' });
+    plan.push({ title: 'Попросите клиентов отмечать вас в сторис', desc: 'Пользовательский контент — самое доверенное социальное доказательство.' });
+  }
+
+  return plan.slice(0, 5);
+}
+</script>
+
+</body>
+</html>
