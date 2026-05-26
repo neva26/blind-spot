@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Start-Process \"msedge\" -ArgumentList \"c:\\\\Users\\\\��ਭ�\\\\Documents\\\\Projects\\\\my-first-project\\\\����� �����\\\\vizitka.html\")"
+    ]
+  }
+}
